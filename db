@@ -1,0 +1,150 @@
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+
+public class DatabaseConnection {
+    private static final String URL = "jdbc:mysql://localhost:3306/timetable_db";
+    private static final String USER = "root";
+    private static final String PASSWORD = "your_password";
+
+    public static Connection getConnection() throws SQLException {
+        return DriverManager.getConnection(URL, USER, PASSWORD);
+    }
+}
+
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+
+public class ClassroomDAO {
+    public void saveClassroom(ClassRoom classroom) {
+        String sql = "INSERT INTO classrooms (name, capacity, is_lab) VALUES (?, ?, ?)";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, classroom.getName());
+            stmt.setInt(2, classroom.getCapacity());
+            stmt.setBoolean(3, classroom.isLab());
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+
+public class TeacherDAO {
+    public void saveTeacher(Teacher teacher) {
+        String sql = "INSERT INTO teachers (name) VALUES (?)";
+        String subjectSql = "INSERT INTO teacher_subjects (teacher_id, subject_name) VALUES (LAST_INSERT_ID(), ?)";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement teacherStmt = conn.prepareStatement(sql);
+             PreparedStatement subjectStmt = conn.prepareStatement(subjectSql)) {
+            teacherStmt.setString(1, teacher.getName());
+            teacherStmt.executeUpdate();
+
+            for (String subject : teacher.getSubjects()) {
+                subjectStmt.setString(1, subject);
+                subjectStmt.executeUpdate();
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+}
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+
+public class BatchDAO {
+    public void saveBatch(Student batch) {
+        String sql = "INSERT INTO batches (name, capacity) VALUES (?, ?)";
+        String subjectSql = "INSERT INTO batch_subjects (batch_id, subject_name) VALUES (LAST_INSERT_ID(), ?)";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement batchStmt = conn.prepareStatement(sql);
+             PreparedStatement subjectStmt = conn.prepareStatement(subjectSql)) {
+            batchStmt.setString(1, batch.getName());
+            batchStmt.setInt(2, batch.getCapacity());
+            batchStmt.executeUpdate();
+
+            for (String subject : batch.getSubjects()) {
+                subjectStmt.setString(1, subject);
+                subjectStmt.executeUpdate();
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+
+public class TimetableDAO {
+    public void saveTimetableEntry(String day, String timeSlot, String batchName, String teacherName, String classroomName, String subjectName) {
+        String sql = "INSERT INTO timetable (day_of_week, time_slot, batch_id, teacher_id, classroom_id, subject_name) "
+                   + "VALUES (?, ?, "
+                   + "(SELECT id FROM batches WHERE name = ?), "
+                   + "(SELECT id FROM teachers WHERE name = ?), "
+                   + "(SELECT id FROM classrooms WHERE name = ?), ?)";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, day);
+            stmt.setString(2, timeSlot);
+            stmt.setString(3, batchName);
+            stmt.setString(4, teacherName);
+            stmt.setString(5, classroomName);
+            stmt.setString(6, subjectName);
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+}
+import java.util.List;
+
+public class TimetableGeneration {
+    private ClassroomDAO classroomDAO = new ClassroomDAO();
+    private TeacherDAO teacherDAO = new TeacherDAO();
+    private BatchDAO batchDAO = new BatchDAO();
+    private TimetableDAO timetableDAO = new TimetableDAO();
+
+    public void saveAllData(List<ClassRoom> classrooms, List<Teacher> teachers, List<Student> batches, List<TimeSlot> timetableEntries) {
+        // Save classrooms
+        for (ClassRoom classroom : classrooms) {
+            classroomDAO.saveClassroom(classroom);
+        }
+
+        // Save teachers
+        for (Teacher teacher : teachers) {
+            teacherDAO.saveTeacher(teacher);
+        }
+
+        // Save batches
+        for (Student batch : batches) {
+            batchDAO.saveBatch(batch);
+        }
+
+        // Save timetable
+        for (TimeSlot entry : timetableEntries) {
+            timetableDAO.saveTimetableEntry(entry.getDay(), entry.getTimeSlot(), 
+                                            entry.getBatchName(), entry.getTeacherName(), 
+                                            entry.getClassroomName(), entry.getSubjectName());
+        }
+    }
+}
+public static void main(String[] args) {
+    TimetableGeneration timetable = new TimetableGeneration();
+
+    // Add classrooms, teachers, and students as before...
+
+    // Generate timetable
+    timetable.generateTimetable();
+
+    // Save to database
+    timetable.saveAllData(classrooms, teachers, students, timetableEntries);
+}
